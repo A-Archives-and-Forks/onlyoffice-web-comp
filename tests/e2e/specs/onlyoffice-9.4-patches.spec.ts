@@ -72,6 +72,32 @@ const expectCanvasRestored = async (canvas: Locator, before: number) => {
   await expect.poll(() => canvasChecksum(canvas)).toBe(before);
 };
 
+const triggerEditorPrint = async (frame: Frame) => {
+  await expect
+    .poll(
+      () =>
+        frame.evaluate(() => {
+          const leftMenu = window.DE?.getController?.("LeftMenu");
+          return typeof leftMenu?.api?.asc_Print === "function";
+        }),
+      { timeout: 60_000 },
+    )
+    .toBe(true);
+
+  const triggered = await frame.evaluate(() => {
+    const leftMenu = window.DE?.getController?.("LeftMenu");
+    if (
+      typeof leftMenu?.clickMenuFileItem === "function" &&
+      typeof leftMenu?.api?.asc_Print === "function"
+    ) {
+      leftMenu.clickMenuFileItem(null, "print");
+      return true;
+    }
+    return false;
+  });
+  expect(triggered).toBe(true);
+};
+
 const loadFontFromServer = (frame: Frame, fontName: string) =>
   frame.evaluate((name) => {
     const editor = window.Asc?.editor as {
@@ -294,11 +320,7 @@ test("9.4 Word prints PDF without navigating to the mock cache URL", async ({ pa
     "#id_viewer_overlay",
   );
 
-  await editorFrame.getByRole("tab", { name: "文件" }).click();
-  await editorFrame
-    .locator("a.menu-item:visible")
-    .filter({ hasText: "打印" })
-    .click();
+  await triggerEditorPrint(editorFrame);
 
   const printFrame = editorFrame.locator("#id-print-frame");
   await expect(printFrame).toBeAttached({ timeout: 60_000 });
@@ -343,11 +365,7 @@ test("9.4 CDN Word prints the bridged PDF instead of a blank page", async ({ pag
   await expect(editorFrame.locator("#id_viewer_overlay")).toBeVisible({
     timeout: 60_000,
   });
-  await editorFrame.getByRole("tab", { name: "文件" }).click();
-  await editorFrame
-    .locator("a.menu-item:visible")
-    .filter({ hasText: "打印" })
-    .click();
+  await triggerEditorPrint(editorFrame);
 
   const printFrame = editorFrame.locator("#id-print-frame");
   await expect(printFrame).toBeAttached({ timeout: 60_000 });
