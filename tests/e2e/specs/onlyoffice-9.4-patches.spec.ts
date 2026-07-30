@@ -278,6 +278,85 @@ test("9.4 Word exports PDF through the bundled x2t assets", async ({ page }) => 
   expect(exportErrors).toEqual([]);
 });
 
+test("9.4 Word prints PDF without navigating to the mock cache URL", async ({ page }) => {
+  const cache404s: string[] = [];
+  page.on("response", (response) => {
+    if (response.status() === 404 && response.url().includes("/cache/files/data/")) {
+      cache404s.push(response.url());
+    }
+  });
+
+  await page.goto("/docs/demos/single", { waitUntil: "domcontentloaded" });
+  const editorFrame = await waitForEditorFrame(
+    page,
+    "document",
+    "The 9.4 Word editor iframe did not load",
+    "#id_viewer_overlay",
+  );
+
+  await editorFrame.getByRole("tab", { name: "文件" }).click();
+  await editorFrame
+    .locator("a.menu-item:visible")
+    .filter({ hasText: "打印" })
+    .click();
+
+  const printFrame = editorFrame.locator("#id-print-frame");
+  await expect(printFrame).toBeAttached({ timeout: 60_000 });
+  await expect
+    .poll(() => printFrame.getAttribute("src"), { timeout: 60_000 })
+    .toMatch(/^blob:/);
+  expect(cache404s).toEqual([]);
+});
+
+test("9.4 CDN Word prints the bridged PDF instead of a blank page", async ({ page }) => {
+  const cache404s: string[] = [];
+  page.on("response", (response) => {
+    if (response.status() === 404 && response.url().includes("/cache/files/data/")) {
+      cache404s.push(response.url());
+    }
+  });
+
+  await page.goto("/docs/demos/single", { waitUntil: "domcontentloaded" });
+  await page.getByText("更多", { exact: true }).click();
+  await page.getByLabel("资源").fill(assetOrigin);
+  await page.getByRole("button", { name: "加载" }).click();
+
+  await expect
+    .poll(
+      () =>
+        page.frames().some(
+          (frame) =>
+            frame.url().startsWith(assetOrigin) &&
+            frame.url().includes(editorFrameUrl.document),
+        ),
+      { timeout: 60_000 },
+    )
+    .toBe(true);
+
+  const editorFrame = page.frames().find(
+    (frame) =>
+      frame.url().startsWith(assetOrigin) &&
+      frame.url().includes(editorFrameUrl.document),
+  );
+  if (!editorFrame) throw new Error("The CDN Word editor iframe did not load");
+
+  await expect(editorFrame.locator("#id_viewer_overlay")).toBeVisible({
+    timeout: 60_000,
+  });
+  await editorFrame.getByRole("tab", { name: "文件" }).click();
+  await editorFrame
+    .locator("a.menu-item:visible")
+    .filter({ hasText: "打印" })
+    .click();
+
+  const printFrame = editorFrame.locator("#id-print-frame");
+  await expect(printFrame).toBeAttached({ timeout: 60_000 });
+  await expect
+    .poll(() => printFrame.getAttribute("src"), { timeout: 60_000 })
+    .toMatch(/^blob:/);
+  expect(cache404s).toEqual([]);
+});
+
 test("9.4 multi-instance demo keeps one connector per editor", async ({ page }) => {
   await page.goto("/docs/demos/multi", { waitUntil: "domcontentloaded" });
   await waitForEditorFrame(

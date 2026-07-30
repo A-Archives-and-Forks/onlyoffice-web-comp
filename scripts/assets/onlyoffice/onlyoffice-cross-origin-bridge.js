@@ -764,6 +764,62 @@
     window.__ONLYOFFICE_GETFILE_PATCHED__ = true;
   }
 
+  function installPrintFramePatch() {
+    if (window.__ONLYOFFICE_PRINT_FRAME_PATCHED__) {
+      return;
+    }
+
+    var iframePrototype = window.HTMLIFrameElement.prototype;
+    var srcDescriptor = Object.getOwnPropertyDescriptor(
+      iframePrototype,
+      "src",
+    );
+    if (!srcDescriptor || !srcDescriptor.get || !srcDescriptor.set) {
+      return;
+    }
+
+    var nativeGetter = srcDescriptor.get;
+    var nativeSetter = srcDescriptor.set;
+    Object.defineProperty(iframePrototype, "src", {
+      configurable: srcDescriptor.configurable,
+      enumerable: srcDescriptor.enumerable,
+      get: nativeGetter,
+      set: function (value) {
+        var target = this;
+        if (
+          target.id !== "id-print-frame" ||
+          typeof value !== "string" ||
+          value.indexOf("/cache/files/") === -1
+        ) {
+          nativeSetter.call(target, value);
+          return;
+        }
+
+        window
+          .fetch(value)
+          .then(function (response) {
+            if (!response.ok) {
+              throw new Error("Print PDF fetch failed: " + response.status);
+            }
+            return response.blob();
+          })
+          .then(function (blob) {
+            var objectUrl = URL.createObjectURL(blob);
+            nativeSetter.call(target, objectUrl);
+            window.setTimeout(function () {
+              URL.revokeObjectURL(objectUrl);
+            }, 60000);
+          })
+          .catch(function (error) {
+            console.warn("[OnlyOffice] print PDF fetch failed:", error);
+            nativeSetter.call(target, value);
+          });
+      },
+    });
+
+    window.__ONLYOFFICE_PRINT_FRAME_PATCHED__ = true;
+  }
+
   function syncControllerReadOnly(readOnly) {
     try {
       var common = window.Common;
@@ -1820,4 +1876,5 @@
   installFetchProxy();
   installXhrProxy();
   installNamedDownloadPatch(100);
+  installPrintFramePatch();
 })();

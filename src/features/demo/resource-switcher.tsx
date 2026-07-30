@@ -2,7 +2,7 @@ import { DemoButton, DemoField } from "./demo-toolbar";
 import { OnlyOfficeManager } from "@/components/onlyoffice-web-comp";
 
 export const DEFAULT_DEMO_CDN_ORIGIN =
-  "https://b26830b7.onlyoffice-packages.pages.dev";
+  "https://ca0eac5f.onlyoffice-packages.pages.dev";
 
 export type DemoResourceMode = "local" | "cdn";
 

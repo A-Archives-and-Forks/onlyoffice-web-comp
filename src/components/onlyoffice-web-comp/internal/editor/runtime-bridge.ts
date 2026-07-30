@@ -685,7 +685,10 @@ export function unregisterScopedIo(containerId: string, win: Window = window) {
 export type OnlyOfficeProxyWindow = Window & {
   __ONLYOFFICE_PROXIES_INSTALLED__?: boolean;
   __ONLYOFFICE_GETFILE_PATCHED__?: boolean;
+  __ONLYOFFICE_PRINT_FRAME_PATCHED__?: boolean;
   __ONLYOFFICE_PROXY_SERVER__?: EditorServer;
+  HTMLIFrameElement: typeof HTMLIFrameElement;
+  URL: typeof URL;
   XMLHttpRequest: typeof XMLHttpRequest;
   Worker: typeof Worker;
   AscCommon?: {
@@ -860,6 +863,72 @@ function installNamedDownloadPatch(
   win.__ONLYOFFICE_GETFILE_PATCHED__ = true;
 }
 
+/**
+ * @description Print uses a hidden iframe navigation instead of XHR/fetch.
+ * The mock cache URL is only handled by our proxy middleware, so translate it
+ * to a Blob URL before the browser attempts the navigation.
+ */
+function installPrintFramePatch(
+  win: OnlyOfficeProxyWindow,
+  server: EditorServer,
+) {
+  if (win.__ONLYOFFICE_PRINT_FRAME_PATCHED__) {
+    return;
+  }
+
+  const iframePrototype = win.HTMLIFrameElement?.prototype;
+  const srcDescriptor = iframePrototype
+    ? Object.getOwnPropertyDescriptor(iframePrototype, "src")
+    : undefined;
+  if (!srcDescriptor?.set || !srcDescriptor.get) {
+    return;
+  }
+
+  const nativeSetter = srcDescriptor.set;
+  const nativeGetter = srcDescriptor.get;
+  const fetchFile = win.fetch.bind(win);
+
+  Object.defineProperty(iframePrototype, "src", {
+    configurable: srcDescriptor.configurable,
+    enumerable: srcDescriptor.enumerable,
+    get: nativeGetter,
+    set(value: string) {
+      const outputName = extractOutputNameFromCacheUrl(value);
+      const blobUrl = outputName
+        ? server.getStoredOutputUrl(outputName)
+        : null;
+
+      if (!blobUrl || !value.includes("/cache/files/")) {
+        nativeSetter.call(this, value);
+        return;
+      }
+
+      // Fetch through the patched bridge so this also works when the editor
+      // iframe is loaded from the CDN origin.
+      void fetchFile(blobUrl)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Print PDF fetch failed: ${response.status}`);
+          }
+          return response.blob();
+        })
+        .then((blob) => {
+          const objectUrl = win.URL.createObjectURL(blob);
+          nativeSetter.call(this, objectUrl);
+          // Keep the URL alive through the browser print dialog and release it
+          // later; the print controller owns the iframe lifecycle.
+          win.setTimeout(() => win.URL.revokeObjectURL(objectUrl), 60_000);
+        })
+        .catch((error) => {
+          console.warn("[OnlyOffice] print PDF fetch failed:", error);
+          nativeSetter.call(this, value);
+        });
+    },
+  });
+
+  win.__ONLYOFFICE_PRINT_FRAME_PATCHED__ = true;
+}
+
 export function installOnlyOfficeProxies(
   win: OnlyOfficeProxyWindow,
   server: EditorServer,
@@ -870,6 +939,7 @@ export function installOnlyOfficeProxies(
 
   if (win.__ONLYOFFICE_PROXIES_INSTALLED__) {
     scheduleNamedDownloadPatch(win, server);
+    installPrintFramePatch(win, server);
     return;
   }
 
@@ -903,6 +973,7 @@ export function installOnlyOfficeProxies(
   Object.assign(win, patches);
   win.__ONLYOFFICE_PROXIES_INSTALLED__ = true;
   scheduleNamedDownloadPatch(win, server);
+  installPrintFramePatch(win, server);
 }
 
 export const REPORTER_HTML = "index.reporter.html";

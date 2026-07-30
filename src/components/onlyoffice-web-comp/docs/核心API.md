@@ -57,7 +57,7 @@ import {
 
 // packages 根地址，目录下应包含 onlyoffice/{version}/...
 OnlyOfficeManager.registerStaticResource({
-  cdnOrigin: "https://b26830b7.onlyoffice-packages.pages.dev",
+  cdnOrigin: "https://ca0eac5f.onlyoffice-packages.pages.dev",
 });
 
 const resource = getStaticResource();
@@ -78,7 +78,7 @@ OnlyOfficeManager.resetStaticResource();
 
 ```typescript
 type OnlyOfficeStaticResourceOptions = {
-  /** CDN packages 根地址，例如 https://b26830b7.onlyoffice-packages.pages.dev */
+  /** CDN packages 根地址，例如 https://ca0eac5f.onlyoffice-packages.pages.dev */
   cdnOrigin?: string | null;
   /** CDN 的 SDK 版本；默认当前 9.4 SDK */
   onlyofficeVersion?: string | null;
