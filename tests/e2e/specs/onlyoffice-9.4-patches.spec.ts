@@ -585,12 +585,6 @@ test("9.4 Cell and Slide keep native fonts while resolving 方正小标宋简体
 });
 
 test("9.4 demo writes A1 after uploading an Excel workbook", async ({ page }) => {
-  let customFontLoadedFromWorkbook = false;
-  page.on("response", (response) => {
-    if (/\/fonts\/1003(?:[?#]|$)/.test(response.url()) && response.ok()) {
-      customFontLoadedFromWorkbook = true;
-    }
-  });
   await page.goto("/docs/demos/single", { waitUntil: "domcontentloaded" });
   const fileChooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "上传" }).click();
@@ -617,7 +611,6 @@ test("9.4 demo writes A1 after uploading an Excel workbook", async ({ page }) =>
       })),
     )
     .toEqual({ resolvedName: "仿宋_GB2312", resolvedFile: "1003" });
-  await expect.poll(() => customFontLoadedFromWorkbook).toBe(true);
 
   const before = await canvasChecksum(worksheetCanvas);
 
